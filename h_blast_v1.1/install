@@ -61,7 +61,6 @@ read user_input
 
 
 if [ $user_input == "yes" ]; then
-    echo "Continuing with the downloading of $ncbi_blast_version..."
     download=1
 else
     echo "Please enter \"yes\" or \"no\""
@@ -73,19 +72,24 @@ mkdir -p ${exe_dir}
 
 
 if [ $download == 1 ]; then
-    
   
+    if [ ! -f "${ncbi_blast_version}.tar.gz" ]; then   
 #Download the version 2.2.28 of NCBI BLAST
-    echo "Downloading NBCI BLAST"
-    wget ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.2.28/${ncbi_blast_version}.tar.gz
-    if [ $? -ne 0 ]; then
-	echo -e "\nError downloading ${ncbi_blast_version}. Verify that the file exists in the server. Exiting..."
-	exit 1
+	    echo "Downloading NBCI BLAST"
+	    wget ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.2.28/${ncbi_blast_version}.tar.gz
+	    if [ $? -ne 0 ]; then
+		echo -e "\nError downloading ${ncbi_blast_version}. Verify that the file exists in the server. Exiting..."
+		exit 1
+	    fi
+	    echo -e "\nExtracting NCBI BLAST"
+	    progress_ind &
+	    pid=$!
+	    trap "stop_progress_ind $pid; exit" INT TERM EXIT
+
+    else
+		echo "Using the existed file ${ncbi_blast_version}.tar.gz instead of downloading it."
+		rm -r ncbi-blast-2.2.28+-src/
     fi
-    echo -e "\nExtracting NCBI BLAST"
-    progress_ind &
-    pid=$!
-    trap "stop_progress_ind $pid; exit" INT TERM EXIT
     
     tar -xzf ${ncbi_blast_version}.tar.gz
     
@@ -175,7 +179,17 @@ if [[ ! -d ${cudart_lib} ]]; then
     exit 1
 fi
 
-make -f Makefile -B NVCC_PATH=${nvcc} PROJ_DIR=${proj_dir} CXX_DIR=${cxx_dir} CUDA_LIB=${cudart_lib} > ${working_dir}/H-BLAST.output
+#build the library libhblast.a 
+#make -f Makefile clean
+make -f Makefile -B NVCC_PATH=${nvcc} PROJ_DIR=${proj_dir} CXX_DIR=${cxx_dir} CUDA_LIB=${cudart_lib} &> ${working_dir}/H-BLAST.output
+
+
+if [ ! -f "${working_dir}/H-BLAST/libhblast.a" ]; then 
+	echo -e "\nThe libhblast.a can not be generated!\n"
+	echo -e "The error message can be found in the file ${working_dir}/H-BLAST.output!\n"
+	exit 1
+fi
+
 
 #Modify CONF_LIB of Makefile.mk to inlcude the libraries -lhblast and -lcudart
 cp ${build_dir}/Makefile.mk ${build_dir}/Makefile.mk.backup
@@ -227,11 +241,11 @@ cp ${installed_dir}/blastx ${exe_dir}/H-BLASTX
 cp ${installed_dir}/makeblastdb ${exe_dir}/makeblastdbX
 
 cp ${working_dir}/scripts/fasta-splitterA.pl ${exe_dir}/fasta-splitterA.pl
-chmod 777 ./fasta-splitterA.pl
+chmod 777 ${exe_dir}/fasta-splitterA.pl
 cp ${working_dir}/scripts/H-BLASTM ${exe_dir}/
-chmod 777 ./H-BLASTM
+chmod 777 ${exe_dir}/H-BLASTM
 cp ${working_dir}/scripts/makeGPUDB ${exe_dir}/
-chmod 777 ./makeGPUDB
+chmod 777 ${exe_dir}/makeGPUDB
 
 cp ${working_dir}/runtime_setting_files/H-BLAST_runtime_options ${exe_dir}/
 
